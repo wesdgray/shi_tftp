@@ -350,7 +350,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "shiTFTP"
+name = "shi_tftp"
 version = "0.1.0"
 dependencies = [
  "blake3",

@@ -1,7 +1,7 @@
-use crate::Message;
+use shi_tftp::protocol::Message;
+use shi_tftp::protocol::Mode;
 use clap::Parser;
 use log::{debug, error, info, warn};
-use shiTFTP::*;
 use std::{
     fs::File,
     io::{BufReader, BufWriter, Write},
@@ -40,7 +40,7 @@ fn main() {
             let socket = UdpSocket::bind("127.0.0.0:0").unwrap();
             let read_req = Message::Read {
                 filename: filename.to_string(),
-                mode: Mode::NetAscii,
+                mode: Mode::Octet,
             };
             let recv = socket
                 .send_to(read_req.encode().as_slice(), server)

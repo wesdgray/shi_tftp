@@ -7,7 +7,7 @@ use std::{net::UdpSocket, path::PathBuf, thread};
 use crate::protocol::Message;
 use crate::protocol::Mode;
 
-struct Server {
+pub struct Server {
     socket: UdpSocket,
     root_dir: PathBuf,
     mode: Mode,
@@ -16,7 +16,7 @@ struct Server {
 }
 
 impl Server {
-    fn new(listen_addr: SocketAddr, root_dir: PathBuf, mode: Mode) -> Result<Self, ()> {
+    pub fn new(listen_addr: SocketAddr, root_dir: PathBuf, mode: Mode) -> Result<Self, ()> {
         let socket = UdpSocket::bind(listen_addr).map_err(|_| ())?;
         let threads = ThreadJoiner::new();
         let buf = [0_u8; 1024];
@@ -25,11 +25,34 @@ impl Server {
             root_dir,
             mode,
             threads,
+            buf
         })
+    }
+
+    pub fn start(&mut self) {
+        loop {
+            let (bytes_read, sender) = self.socket.recv_from(&mut self.buf).unwrap();
+            debug!("bytes_read: {}", bytes_read);
+
+            let read = self.buf.to_vec();
+            debug!("Vec len {} | values: {:?}", read.len(), read);
+            debug!("As UTF8: {}", String::from_utf8(read).unwrap());
+
+            let copy = self.buf.clone();
+            if let Ok(message) = copy.as_slice().try_into() {
+                let handle = thread::spawn(move || {
+                    handle_request(message, sender);
+                });
+                self.threads.handles.push(handle);
+            } else {
+                warn!("Received invalid message!");
+                debug!("Message content: {:?}", &self.buf);
+            }
+        }
     }
 }
 
-struct ThreadJoiner {
+pub struct ThreadJoiner {
     handles: Vec<thread::JoinHandle<()>>,
 }
 
@@ -47,7 +70,7 @@ impl Drop for ThreadJoiner {
     }
 }
 
-fn read_request(filename: String, mode: Mode) {
+fn read_request(filename: &str, mode: Mode, remote_addr: SocketAddr) {
     info!("Starting Read request for filename: {}", filename);
     // TODO: Need to disallow .. and absolute paths
     let file = File::open(filename).unwrap();
@@ -93,15 +116,15 @@ fn read_request(filename: String, mode: Mode) {
     }
 }
 
-fn write_request(filename: String, mode: Mode) {
+fn write_request(filename: &str, mode: Mode, remote_addr: SocketAddr) {
     info!("Filename: {filename}, mode: {mode:?}");
 }
 
 fn handle_request(message: Message, remote_addr: SocketAddr) {
     debug!("Remote Address: {:?}", remote_addr);
     match message {
-        Message::Read { filename, mode } => read_request(filename, mode),
-        Message::Write { filename, mode } => write_request(filename, mode),
+        Message::Read { filename, mode } => read_request(filename.as_str(), mode, remote_addr),
+        Message::Write { filename, mode } => write_request(filename.as_str(), mode, remote_addr),
         _ => {
             // TODO: Send an error back to the client
             error!("Transfers must be either be a Message::Read or Message::Write!");
